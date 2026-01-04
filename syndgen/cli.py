@@ -1,0 +1,237 @@
+"""
+Syndgen CLI Module
+
+Command-line interface for the Syndgen synthetic data generation pipeline.
+"""
+
+import argparse
+import sys
+import logging
+from typing import Optional
+from .core.schema import GenerationConfig, ExportConfig
+from .pipeline.core import SyndgenPipeline
+from .export.formats import DataExporter
+from .utils.helpers import setup_logging, print_stats
+import os
+
+def main():
+    """Main CLI entry point"""
+    parser = argparse.ArgumentParser(
+        description="Syndgen - Localized Synthetic Data Generation & Distillation Engine",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    # Main arguments
+    parser.add_argument(
+        "--mode",
+        choices=["generate", "export", "batch"],
+        default="generate",
+        help="Operation mode"
+    )
+
+    # Generation arguments
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=10,
+        help="Number of samples to generate"
+    )
+
+    parser.add_argument(
+        "--seed",
+        type=str,
+        help="Optional seed input for generation"
+    )
+
+    # Model configuration
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="deepseek-r1-1.5b",
+        help="LLM model to use"
+    )
+
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.7,
+        help="Sampling temperature"
+    )
+
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=512,
+        help="Maximum tokens to generate"
+    )
+
+    parser.add_argument(
+        "--rejection-threshold",
+        type=int,
+        default=4,
+        choices=range(1, 6),
+        help="Minimum logic score to accept (1-5)"
+    )
+
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=1,
+        help="Maximum regeneration attempts"
+    )
+
+    # Export configuration
+    parser.add_argument(
+        "--export-format",
+        type=str,
+        default="jsonl",
+        choices=["jsonl", "parquet"],
+        help="Export format"
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="output",
+        help="Output directory"
+    )
+
+    parser.add_argument(
+        "--include-reasoning",
+        action="store_true",
+        default=True,
+        help="Include reasoning traces in export"
+    )
+
+    parser.add_argument(
+        "--no-reasoning",
+        dest="include_reasoning",
+        action="store_false",
+        help="Exclude reasoning traces from export"
+    )
+
+    parser.add_argument(
+        "--compression",
+        type=str,
+        choices=["gzip", "bz2"],
+        help="Compression format for parquet"
+    )
+
+    # Debug/verbose
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging"
+    )
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging"
+    )
+
+    args = parser.parse_args()
+
+    # Set up logging
+    log_level = logging.DEBUG if args.debug else logging.INFO if args.verbose else logging.WARNING
+    setup_logging(log_level)
+
+    logging.info("Starting Syndgen pipeline...")
+
+    try:
+        # Create configuration
+        gen_config = GenerationConfig(
+            model_name=args.model,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            rejection_threshold=args.rejection_threshold,
+            max_retries=args.max_retries
+        )
+
+        export_config = ExportConfig(
+            format=args.export_format,
+            output_dir=args.output_dir,
+            include_reasoning=args.include_reasoning,
+            compression=args.compression
+        )
+
+        # Initialize pipeline and exporter
+        pipeline = SyndgenPipeline(gen_config)
+        exporter = DataExporter(export_config)
+
+        if args.mode == "generate":
+            # Generate single sample
+            sample = pipeline.generate_sample(args.seed)
+            print(f"Generated sample ID: {sample.id}")
+            print(f"Valid: {sample.is_valid}")
+            print(f"Logic score: {sample.reasoning_trace.logic_score}")
+            print("\nFinal Output:")
+            print(sample.final_output)
+
+        elif args.mode == "export":
+            # Generate and export batch
+            samples = pipeline.generate_batch(args.batch_size, args.seed)
+            valid_samples = [s for s in samples if s.is_valid]
+
+            print(f"Generated {len(samples)} samples, {len(valid_samples)} valid")
+
+            # Export in all formats
+            filename = exporter.export_samples(valid_samples)
+            sft_filename = exporter.export_sft_format(valid_samples)
+            dpo_filename = exporter.export_dpo_format(valid_samples)
+
+            print(f"\nExported to:")
+            print(f"  Primary: {filename}")
+            print(f"  SFT: {sft_filename}")
+            print(f"  DPO: {dpo_filename}")
+
+        elif args.mode == "batch":
+            # Generate and export batch with stats
+            result = exporter.batch_export(pipeline, args.batch_size)
+
+            print(f"\nBatch export completed:")
+            print(f"  Primary: {result['primary_export']}")
+            print(f"  SFT: {result['sft_export']}")
+            print(f"  DPO: {result['dpo_export']}")
+
+            print("\nPipeline Statistics:")
+            print_stats(result['stats'])
+
+        # Print final stats
+        stats = pipeline.get_stats()
+        print("\nFinal Statistics:")
+        print_stats(stats)
+
+    except Exception as e:
+        logging.error(f"Error in Syndgen pipeline: {e}")
+        sys.exit(1)
+
+def print_help():
+    """Print help information"""
+    print("""
+Syndgen - Localized Synthetic Data Generation & Distillation Engine
+
+Usage:
+  python -m syndgen [OPTIONS]
+
+Modes:
+  generate      Generate a single sample
+  export        Generate and export a batch of samples
+  batch         Generate, export, and show detailed statistics
+
+Examples:
+  # Generate single sample
+  python -m syndgen --mode generate
+
+  # Generate and export 50 samples
+  python -m syndgen --mode export --batch-size 50
+
+  # Generate batch with custom settings
+  python -m syndgen --mode batch --batch-size 100 --temperature 0.9 --rejection-threshold 3
+
+  # Export to parquet with compression
+  python -m syndgen --mode export --export-format parquet --compression gzip
+""")
+
+if __name__ == "__main__":
+    main()

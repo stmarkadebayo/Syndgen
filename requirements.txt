@@ -1,0 +1,21 @@
+# Syndgen - Synthetic Data Generation Pipeline
+# Requirements for running the Syndgen pipeline
+
+# Core dependencies
+pydantic>=1.8.0,<2.0.0
+pandas>=1.3.0
+pyarrow>=5.0.0
+python-dateutil>=2.8.0
+
+# Optional dependencies for full functionality
+# ollama>=0.1.0  # For actual LLM integration (commented out as not required for simulation)
+
+# Development dependencies
+# pytest>=6.0.0
+# black>=21.0
+# flake8>=3.9.0
+# mypy>=0.900
+
+# Note: This requirements file includes the core dependencies needed to run
+# the Syndgen pipeline in simulation mode. For full LLM integration with
+# DeepSeek R1 1.5B, you would need to install Ollama and pull the model.
