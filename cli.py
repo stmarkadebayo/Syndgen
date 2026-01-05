@@ -200,7 +200,18 @@ def main():
         # Print final stats
         stats = pipeline.get_stats()
         print("\nFinal Statistics:")
-        print_stats(stats)
+        try:
+            print_stats(stats)
+        except Exception as e:
+            print(f"Error printing stats: {e}")
+            # Print basic stats without datetime objects
+            print(f"  Total Generated: {stats.get('total_generated', 0)}")
+            print(f"  Total Valid: {stats.get('total_valid', 0)}")
+            print(f"  Total Rejected: {stats.get('total_rejected', 0)}")
+            print(f"  Rejection Rate: {stats.get('rejection_rate', 0):.1%}")
+            print(f"  Avg Generation Time: {stats.get('avg_generation_time', 0):.3f}s")
+            print(f"  Avg Evaluation Time: {stats.get('avg_evaluation_time', 0):.3f}s")
+            print(f"  Runtime: {stats.get('runtime', 0):.2f}s")
 
     except Exception as e:
         logging.error(f"Error in Syndgen pipeline: {e}")

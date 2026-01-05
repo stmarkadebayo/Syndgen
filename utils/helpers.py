@@ -28,6 +28,12 @@ def print_stats(stats: Dict[str, Any]):
     print(f"  Avg Evaluation Time: {stats.get('avg_evaluation_time', 0):.3f}s")
     print(f"  Runtime: {stats.get('runtime', 0):.2f}s")
 
+    # Handle datetime objects if present
+    if 'start_time' in stats and stats['start_time'] is not None:
+        print(f"  Start Time: {format_timestamp(stats['start_time'])}")
+    if 'end_time' in stats and stats['end_time'] is not None:
+        print(f"  End Time: {format_timestamp(stats['end_time'])}")
+
 def format_timestamp(timestamp: datetime) -> str:
     """Format timestamp for display"""
     return timestamp.strftime("%Y-%m-%d %H:%M:%S")
