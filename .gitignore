@@ -26,3 +26,6 @@ logs/
 test/
 tests/
 *.test.py
+
+
+SOLUTION_SUMMARY.md
