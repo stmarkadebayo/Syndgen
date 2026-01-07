@@ -124,8 +124,8 @@ class SyndgenPipeline:
             Ensure the reasoning trace shows clear logical progression and the final output is high-quality and informative."""
 
             # Call Ollama API
-            # Fix model name format (replace last hyphen with colon for Ollama)
-            model_name = self.config.model_name.rsplit('-', 1)[0] + ':' + self.config.model_name.rsplit('-', 1)[1]
+            # Use model name as-is (Ollama expects the full model name with hyphens)
+            model_name = self.config.model_name
             response = ollama.generate(
                 model=model_name,
                 prompt=cot_prompt,
@@ -224,8 +224,8 @@ class SyndgenPipeline:
             Question: [Your question here]
             Answer: [Your detailed answer here]"""
 
-            # Fix model name format (replace hyphen with colon for Ollama)
-            model_name = self.config.model_name.replace('-', ':')
+            # Use model name as-is (Ollama expects the full model name with hyphens)
+            model_name = self.config.model_name
             response = ollama.generate(
                 model=model_name,
                 prompt=output_prompt,
