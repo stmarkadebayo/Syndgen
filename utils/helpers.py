@@ -5,8 +5,10 @@ Helper functions and utilities for the Syndgen pipeline.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
+import ollama
+import os
 
 def setup_logging(level: int = logging.INFO):
     """Set up logging configuration"""
@@ -102,3 +104,31 @@ def get_sample_summary(sample: Dict[str, Any]) -> str:
         f"Output Length: {len(sample.get('final_output', ''))} chars"
     ]
     return "\n".join(summary)
+
+def setup_ollama_client() -> Optional[Any]:
+    """
+    Set up and configure the Ollama client for LLM integration
+
+    Returns:
+        Optional[Any]: Configured Ollama client or None if not available
+    """
+    try:
+        # Check if Ollama is available
+        ollama_client = ollama
+
+        # Configure default settings
+        ollama_host = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+
+        # Test connection
+        try:
+            # Simple test to check if Ollama server is running
+            models = ollama.list()
+            logging.info(f"Ollama client initialized. Available models: {[m['name'] for m in models['models']]}")
+            return ollama_client
+        except Exception as e:
+            logging.warning(f"Ollama server not available: {e}")
+            return None
+
+    except ImportError:
+        logging.warning("Ollama package not available. Falling back to simulation mode.")
+        return None
