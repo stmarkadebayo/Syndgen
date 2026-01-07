@@ -12,8 +12,8 @@ import json
 import os
 from typing import List, Optional, Union
 import pandas as pd
-from ..core.schema import GeneratedSample, SFTFormat, DPOFormat, ExportConfig
-from ..pipeline.core import SyndgenPipeline
+from core.schema import GeneratedSample, SFTFormat, DPOFormat, ExportConfig
+from pipeline.core import SyndgenPipeline
 import logging
 from datetime import datetime
 
