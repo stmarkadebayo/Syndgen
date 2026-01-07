@@ -8,10 +8,10 @@ import argparse
 import sys
 import logging
 from typing import Optional
-from .core.schema import GenerationConfig, ExportConfig
-from .pipeline.core import SyndgenPipeline
-from .export.formats import DataExporter
-from .utils.helpers import setup_logging, print_stats
+from core.schema import GenerationConfig, ExportConfig
+from pipeline.core import SyndgenPipeline
+from export.formats import DataExporter
+from utils.helpers import setup_logging, print_stats
 import os
 
 def main():
