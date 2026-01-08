@@ -13,6 +13,10 @@ from pipeline.core import SyndgenPipeline
 from export.formats import DataExporter
 from utils.helpers import setup_logging, print_stats
 import os
+import subprocess
+import platform
+import time
+import ollama
 
 def main():
     """Main CLI entry point"""
@@ -136,6 +140,9 @@ def main():
     log_level = logging.DEBUG if args.debug else logging.INFO if args.verbose else logging.WARNING
     setup_logging(log_level)
 
+    # Check and start Ollama if needed
+    check_and_start_ollama()
+
     logging.info("Starting Syndgen pipeline...")
 
     try:
@@ -216,6 +223,48 @@ def main():
     except Exception as e:
         logging.error(f"Error in Syndgen pipeline: {e}")
         sys.exit(1)
+
+def check_and_start_ollama():
+    """
+    Check if Ollama is running and start it if needed.
+    Returns True if Ollama is available, False otherwise.
+    """
+    try:
+        # Test if Ollama server is available
+        ollama.show()
+        print("✅ Ollama server is running")
+        return True
+    except Exception:
+        print("🔄 Ollama server not detected. Attempting to start automatically...")
+
+        try:
+            # Start Ollama server based on platform
+            if platform.system() == "Windows":
+                print("💻 Starting Ollama server on Windows...")
+                subprocess.Popen(["start", "cmd", "/k", "ollama", "serve"], shell=True)
+            else:
+                print("🐧 Starting Ollama server on Unix-like system...")
+                subprocess.Popen(["ollama", "serve"])
+
+            # Wait for server to start
+            print("⏳ Waiting for Ollama server to start...")
+            time.sleep(5)
+
+            # Verify it started
+            try:
+                ollama.show()
+                print("✅ Ollama server started successfully!")
+                return True
+            except:
+                print("❌ Ollama server started but not responding. Continuing in simulation mode.")
+                return False
+        except Exception as e:
+            print(f"❌ Could not start Ollama automatically: {e}")
+            print("💡 Please start Ollama manually:")
+            print("   1. Run: ollama serve")
+            print("   2. Run: ollama pull deepseek-r1-1.5b")
+            print("   3. Restart Syndgen")
+            return False
 
 def print_help():
     """Print help information"""
