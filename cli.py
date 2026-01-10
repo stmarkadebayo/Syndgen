@@ -141,9 +141,16 @@ def main():
     setup_logging(log_level)
 
     # Check and start Ollama if needed
-    check_and_start_ollama()
+    ollama_available = check_and_start_ollama()
 
-    logging.info("Starting Syndgen pipeline...")
+    # Determine operational mode
+    if ollama_available:
+        operational_mode = "LLM Mode (Ollama available)"
+    else:
+        operational_mode = "Enhanced Simulation Mode (Ollama not available)"
+
+    print(f"🔧 Operational Mode: {operational_mode}")
+    logging.info(f"Starting Syndgen pipeline in {operational_mode}...")
 
     try:
         # Create configuration
@@ -241,8 +248,16 @@ def check_and_start_ollama():
             # Start Ollama server based on platform
             if platform.system() == "Windows":
                 print("💻 Starting Ollama server on Windows...")
-                # More robust Windows command
-                subprocess.Popen(["cmd", "/c", "start", "cmd", "/k", "ollama", "serve"], shell=True)
+                # Try to start Ollama server directly without new window
+                try:
+                    # First check if ollama.exe exists in PATH
+                    subprocess.run(["where", "ollama"], check=True, capture_output=True)
+                    # Start Ollama server in background
+                    subprocess.Popen(["ollama", "serve"], creationflags=subprocess.CREATE_NO_WINDOW)
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    print("⚠️ Ollama not found in PATH. Please ensure Ollama is installed and in your PATH.")
+                    print("   Download from: https://ollama.com/download")
+                    return False
             else:
                 print("🐧 Starting Ollama server on Unix-like system...")
                 subprocess.Popen(["ollama", "serve"])
