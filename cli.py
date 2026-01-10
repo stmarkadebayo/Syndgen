@@ -241,19 +241,32 @@ def check_and_start_ollama():
             # Start Ollama server based on platform
             if platform.system() == "Windows":
                 print("💻 Starting Ollama server on Windows...")
-                subprocess.Popen(["start", "cmd", "/k", "ollama", "serve"], shell=True)
+                # More robust Windows command
+                subprocess.Popen(["cmd", "/c", "start", "cmd", "/k", "ollama", "serve"], shell=True)
             else:
                 print("🐧 Starting Ollama server on Unix-like system...")
                 subprocess.Popen(["ollama", "serve"])
 
             # Wait for server to start
             print("⏳ Waiting for Ollama server to start...")
-            time.sleep(5)
+            time.sleep(8)  # Increased wait time
 
-            # Verify it started
+            # Verify it started and try to pull model
             try:
                 ollama.show()
                 print("✅ Ollama server started successfully!")
+
+                # Check if model exists, if not pull it
+                try:
+                    models = ollama.list()['models']
+                    model_names = [model['name'] for model in models]
+                    if "deepseek-r1-1.5b" not in model_names:
+                        print("📥 Pulling DeepSeek model (this may take a few minutes)...")
+                        ollama.pull("deepseek-r1-1.5b")
+                        print("✅ Model pulled successfully!")
+                except:
+                    print("⚠️ Could not check/pull model automatically")
+
                 return True
             except:
                 print("❌ Ollama server started but not responding. Continuing in simulation mode.")
@@ -262,7 +275,7 @@ def check_and_start_ollama():
             print(f"❌ Could not start Ollama automatically: {e}")
             print("💡 Please start Ollama manually:")
             print("   1. Run: ollama serve")
-            print("   2. Run: ollama pull deepseek-r1-1.5b")
+            print("   2. In another terminal: ollama pull deepseek-r1-1.5b")
             print("   3. Restart Syndgen")
             return False
 
