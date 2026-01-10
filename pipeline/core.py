@@ -288,8 +288,8 @@ class SyndgenPipeline:
             </evaluation>"""
 
             # Call Ollama for critic evaluation
-            # Fix model name format (replace hyphen with colon for Ollama)
-            model_name = self.config.model_name.replace('-', ':')
+            # Use model name as-is (Ollama expects the full model name with hyphens)
+            model_name = self.config.model_name
             response = ollama.generate(
                 model=model_name,
                 prompt=critic_prompt,
