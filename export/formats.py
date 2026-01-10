@@ -69,6 +69,9 @@ class DataExporter:
                 if not self.config.include_reasoning:
                     sample_dict.pop('reasoning_trace', None)
 
+                # Convert datetime objects to ISO format strings
+                sample_dict = self._serialize_datetimes(sample_dict)
+
                 f.write(json.dumps(sample_dict, ensure_ascii=False) + '\n')
 
     def _export_parquet(self, samples: List[GeneratedSample], filename: str):
@@ -81,6 +84,9 @@ class DataExporter:
             # Optionally exclude reasoning traces
             if not self.config.include_reasoning:
                 sample_dict.pop('reasoning_trace', None)
+
+            # Convert datetime objects to ISO format strings for Parquet compatibility
+            sample_dict = self._serialize_datetimes(sample_dict)
 
             sample_dicts.append(sample_dict)
 
@@ -116,7 +122,9 @@ class DataExporter:
         # Export as JSONL
         with open(filename, 'w', encoding='utf-8') as f:
             for sft_sample in sft_samples:
-                f.write(json.dumps(sft_sample.dict(), ensure_ascii=False) + '\n')
+                sft_dict = sft_sample.dict()
+                sft_dict = self._serialize_datetimes(sft_dict)
+                f.write(json.dumps(sft_dict, ensure_ascii=False) + '\n')
 
         logger.info(f"Exported {len(sft_samples)} samples in SFT format to {filename}")
         return filename
@@ -156,7 +164,9 @@ class DataExporter:
         # Export as JSONL
         with open(filename, 'w', encoding='utf-8') as f:
             for dpo_sample in dpo_samples:
-                f.write(json.dumps(dpo_sample.dict(), ensure_ascii=False) + '\n')
+                dpo_dict = dpo_sample.dict()
+                dpo_dict = self._serialize_datetimes(dpo_dict)
+                f.write(json.dumps(dpo_dict, ensure_ascii=False) + '\n')
 
         logger.info(f"Exported {len(dpo_samples)} samples in DPO format to {filename}")
         return filename
@@ -211,3 +221,22 @@ class DataExporter:
             'dpo_export': dpo_filename,
             'stats': pipeline.get_stats()
         }
+
+    def _serialize_datetimes(self, obj):
+        """
+        Recursively convert datetime objects to ISO format strings for JSON serialization
+
+        Args:
+            obj: Object to serialize (dict, list, or primitive)
+
+        Returns:
+            Object with datetime objects converted to strings
+        """
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, dict):
+            return {key: self._serialize_datetimes(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self._serialize_datetimes(item) for item in obj]
+        else:
+            return obj
