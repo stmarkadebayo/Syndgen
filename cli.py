@@ -125,13 +125,13 @@ def main():
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Enable verbose logging"
+        help="Enable verbose output showing reasoning traces and evaluation details"
     )
 
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Enable debug logging"
+        help="Enable debug output with full pipeline internals and timing"
     )
 
     args = parser.parse_args()
@@ -176,10 +176,33 @@ def main():
         if args.mode == "generate":
             # Generate single sample
             sample = pipeline.generate_sample(args.seed)
+
             print(f"Generated sample ID: {sample.id}")
             print(f"Valid: {sample.is_valid}")
             print(f"Logic score: {sample.reasoning_trace.logic_score}")
-            print("\nFinal Output:")
+
+            # Show verbose/debug output
+            if args.verbose or args.debug:
+                print(f"\n📋 Sample Details:")
+                print(f"   Scenario: {sample.scenario}")
+                print(f"   Seed: {sample.seed or 'None'}")
+                print(f"   Created: {sample.created_at}")
+                print(f"   Generation Time: {sample.metadata.get('generation_time', 0):.3f}s")
+
+                if args.verbose:
+                    print(f"\n🧠 Reasoning Trace (Logic Score: {sample.reasoning_trace.logic_score}):")
+                    for i, thought in enumerate(sample.reasoning_trace.thoughts, 1):
+                        print(f"   {i}. {thought}")
+                    print(f"   Confidence: {sample.reasoning_trace.confidence_score:.2f}")
+
+                if args.debug:
+                    print(f"\n🔍 Debug Information:")
+                    print(f"   Model: {gen_config.model_name}")
+                    print(f"   Temperature: {gen_config.temperature}")
+                    print(f"   Max Tokens: {gen_config.max_tokens}")
+                    print(f"   Rejection Threshold: {gen_config.rejection_threshold}")
+
+            print(f"\n💬 Final Output:")
             print(sample.final_output)
 
         elif args.mode == "export":
