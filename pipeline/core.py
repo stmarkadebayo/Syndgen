@@ -102,7 +102,20 @@ class SyndgenPipeline:
         Returns:
             Tuple of (scenario, reasoning_trace)
         """
+        # Check if we should use simulation mode
+        if not self._is_ollama_available():
+            logger.info("Using enhanced simulation mode for data generation")
+            return self._enhanced_simulation_inference(seed)
+
         try:
+            # Try multiple models in order of preference
+            available_models = self._get_available_models()
+            model_name = self._select_best_model(available_models, self.config.model_name)
+
+            if not model_name:
+                logger.warning("No suitable LLM models available, falling back to enhanced simulation")
+                return self._enhanced_simulation_inference(seed)
+
             # Create prompt for Chain-of-Thought generation
             cot_prompt = f"""You are an expert AI assistant specializing in {seed}.
             Please generate a high-quality question-answer pair with detailed reasoning.
@@ -124,8 +137,6 @@ class SyndgenPipeline:
             Ensure the reasoning trace shows clear logical progression and the final output is high-quality and informative."""
 
             # Call Ollama API
-            # Use model name as-is (Ollama expects the full model name with hyphens)
-            model_name = self.config.model_name
             response = ollama.generate(
                 model=model_name,
                 prompt=cot_prompt,
@@ -169,21 +180,8 @@ class SyndgenPipeline:
 
         except Exception as e:
             logger.error(f"Error in LLM inference: {e}")
-            # Fallback to simulation mode
-            reasoning_steps = [
-                "Analyzing the topic of " + seed,
-                "Identifying key concepts and relationships",
-                "Formulating appropriate question and answer pair",
-                "Ensuring logical consistency and accuracy"
-            ]
-
-            reasoning_trace = ReasoningTrace(
-                thoughts=reasoning_steps,
-                confidence_score=0.8
-            )
-
-            scenario = f"Generating educational content about {seed} for learning purposes"
-            return scenario, reasoning_trace
+            logger.info("Falling back to enhanced simulation mode")
+            return self._enhanced_simulation_inference(seed)
 
     def _generate_final_output(self, scenario: str, reasoning_trace: ReasoningTrace) -> str:
         """
@@ -196,6 +194,10 @@ class SyndgenPipeline:
         Returns:
             Final generated output
         """
+        # Check if we have final output from enhanced simulation
+        if hasattr(self, '_simulation_final_output'):
+            return self._simulation_final_output
+
         # This method is now mostly used as fallback
         # The main output comes from LLM in _inference_layer
         if not hasattr(self, '_llm_final_output'):
@@ -420,3 +422,196 @@ class SyndgenPipeline:
     def reset_stats(self):
         """Reset pipeline statistics"""
         self.stats = PipelineStats()
+
+    def _is_ollama_available(self) -> bool:
+        """Check if Ollama is available and running"""
+        try:
+            # Try to list models to check if Ollama is running
+            ollama.list()
+            return True
+        except Exception:
+            return False
+
+    def _get_available_models(self) -> List[str]:
+        """Get list of available Ollama models"""
+        try:
+            models_info = ollama.list()
+            return [model['name'] for model in models_info.get('models', [])]
+        except Exception:
+            return []
+
+    def _select_best_model(self, available_models: List[str], preferred_model: str) -> Optional[str]:
+        """Select the best available model from preferences"""
+        if preferred_model in available_models:
+            return preferred_model
+
+        # Fallback model preferences
+        fallback_models = [
+            'deepseek-r1-1.5b',
+            'llama2:7b',
+            'mistral:7b',
+            'codellama:7b',
+            'llama2:13b'
+        ]
+
+        for model in fallback_models:
+            if model in available_models:
+                logger.info(f"Preferred model '{preferred_model}' not available, using '{model}' instead")
+                return model
+
+        return None
+
+    def _enhanced_simulation_inference(self, seed: str) -> tuple[str, ReasoningTrace]:
+        """
+        Enhanced simulation mode that generates diverse, realistic synthetic data
+        without requiring LLM access.
+        """
+        import random
+
+        # Diverse topic categories for better variety
+        topic_templates = {
+            "machine_learning": {
+                "questions": [
+                    "What are the key differences between supervised and unsupervised learning?",
+                    "How does gradient descent work in neural networks?",
+                    "What is the bias-variance tradeoff in machine learning?",
+                    "How do decision trees handle categorical features?",
+                    "What are the advantages of ensemble methods like Random Forest?"
+                ],
+                "scenarios": [
+                    "A data scientist explaining ML concepts to a junior developer",
+                    "An AI researcher discussing model training techniques",
+                    "A machine learning engineer optimizing model performance",
+                    "An educator teaching ML fundamentals to students"
+                ]
+            },
+            "programming": {
+                "questions": [
+                    "What are the main differences between lists and tuples in Python?",
+                    "How does garbage collection work in modern programming languages?",
+                    "What are the benefits of functional programming paradigms?",
+                    "How do design patterns improve software architecture?",
+                    "What are the trade-offs between compiled and interpreted languages?"
+                ],
+                "scenarios": [
+                    "A senior developer mentoring a junior programmer",
+                    "A software architect designing scalable systems",
+                    "A coding instructor explaining language features",
+                    "A tech lead reviewing code quality standards"
+                ]
+            },
+            "data_science": {
+                "questions": [
+                    "What statistical tests should be used for different data distributions?",
+                    "How do you handle missing data in a real-world dataset?",
+                    "What are the key principles of data normalization?",
+                    "How do you detect and handle outliers in data analysis?",
+                    "What are the differences between correlation and causation?"
+                ],
+                "scenarios": [
+                    "A data analyst cleaning and preparing datasets",
+                    "A statistician explaining hypothesis testing",
+                    "A data engineer designing ETL pipelines",
+                    "A business analyst interpreting data insights"
+                ]
+            },
+            "ai_concepts": {
+                "questions": [
+                    "What are the main approaches to artificial intelligence?",
+                    "How do neural networks simulate human learning?",
+                    "What are the ethical considerations in AI development?",
+                    "How do reinforcement learning algorithms work?",
+                    "What are the current limitations of AI systems?"
+                ],
+                "scenarios": [
+                    "An AI ethicist discussing responsible AI development",
+                    "A researcher explaining neural network architectures",
+                    "An AI engineer implementing reinforcement learning",
+                    "A philosopher debating AI consciousness and intelligence"
+                ]
+            }
+        }
+
+        # Determine topic category from seed
+        seed_lower = seed.lower()
+        if "machine learning" in seed_lower or "ml" in seed_lower:
+            category = "machine_learning"
+        elif "programming" in seed_lower or "code" in seed_lower or "python" in seed_lower:
+            category = "programming"
+        elif "data" in seed_lower and ("science" in seed_lower or "analysis" in seed_lower):
+            category = "data_science"
+        else:
+            category = "ai_concepts"
+
+        templates = topic_templates[category]
+
+        # Select random but diverse content
+        question = random.choice(templates["questions"])
+        scenario = random.choice(templates["scenarios"])
+
+        # Generate detailed reasoning steps
+        reasoning_steps = [
+            f"Understanding the core question about {category.replace('_', ' ')}",
+            "Analyzing the key concepts and their relationships",
+            "Considering practical applications and examples",
+            "Formulating a comprehensive and accurate answer",
+            "Ensuring the explanation is clear and educational"
+        ]
+
+        # Create sophisticated final output based on category and question
+        if category == "machine_learning":
+            if "supervised" in question.lower() and "unsupervised" in question.lower():
+                answer = """Supervised learning uses labeled training data to learn patterns and make predictions, while unsupervised learning finds hidden patterns in unlabeled data. Supervised learning includes tasks like classification and regression, whereas unsupervised learning focuses on clustering and dimensionality reduction. The key difference is the availability of labeled examples during training."""
+            elif "gradient descent" in question.lower():
+                answer = """Gradient descent is an optimization algorithm that minimizes the loss function by iteratively moving in the direction of the steepest descent. In neural networks, it updates weights by computing gradients through backpropagation. The learning rate controls step size, and techniques like momentum and Adam improve convergence."""
+            elif "bias-variance" in question.lower():
+                answer = """The bias-variance tradeoff represents the balance between model complexity and generalization. High bias leads to underfitting (oversimplified models), while high variance causes overfitting (models that memorize training data). The optimal model finds the sweet spot that minimizes total error on unseen data."""
+            elif "decision trees" in question.lower():
+                answer = """Decision trees handle categorical features by creating branches for each category value. For high-cardinality features, techniques like one-hot encoding or hierarchical splitting are used. Information gain or Gini impurity measures guide the splitting decisions to maximize predictive power."""
+            else:  # ensemble methods
+                answer = """Ensemble methods like Random Forest combine multiple weak learners to create a stronger model. They reduce overfitting through averaging predictions and introduce diversity via bootstrapping and random feature selection. Bagging, boosting, and stacking are common ensemble strategies."""
+        elif category == "programming":
+            if "lists" in question.lower() and "tuples" in question.lower():
+                answer = """Lists are mutable sequences that can be modified after creation, while tuples are immutable and cannot be changed. Lists use square brackets and support operations like append() and remove(), whereas tuples use parentheses and are hashable for use as dictionary keys. Choose lists for dynamic collections and tuples for fixed data structures."""
+            elif "garbage collection" in question.lower():
+                answer = """Modern languages use automatic garbage collection to manage memory. Reference counting tracks object usage, while mark-and-sweep algorithms identify unreachable objects. Generational GC optimizes performance by focusing on short-lived objects. Languages like Python, Java, and Go implement sophisticated GC strategies."""
+            elif "functional programming" in question.lower():
+                answer = """Functional programming emphasizes immutability, pure functions, and higher-order functions. Benefits include easier testing, concurrency support, and mathematical reasoning. Languages like Haskell, Scala, and functional JavaScript demonstrate these principles through features like lambda expressions and monads."""
+            elif "design patterns" in question.lower():
+                answer = """Design patterns provide proven solutions to common software design problems. Creational patterns like Factory and Singleton manage object creation, while structural patterns like Adapter and Composite organize code relationships. Behavioral patterns like Observer and Strategy define communication between objects."""
+            else:  # compiled vs interpreted
+                answer = """Compiled languages translate code to machine language before execution, offering better performance but slower development cycles. Interpreted languages execute code line-by-line, providing faster iteration but potentially slower runtime performance. Modern approaches like JIT compilation blur these lines."""
+        elif category == "data_science":
+            if "statistical tests" in question.lower():
+                answer = """Different data distributions require specific statistical tests. Normal distributions use t-tests and ANOVA, while non-parametric tests like Mann-Whitney U and Kruskal-Wallis handle non-normal data. Chi-square tests work with categorical variables, and correlation tests examine relationships between continuous variables."""
+            elif "missing data" in question.lower():
+                answer = """Missing data can be handled through deletion, imputation, or model-based approaches. Listwise deletion removes incomplete cases, while mean/median imputation fills missing values. Advanced techniques like multiple imputation and KNN imputation preserve data relationships and reduce bias."""
+            elif "normalization" in question.lower():
+                answer = """Data normalization scales features to comparable ranges. Min-max scaling rescales to [0,1], while z-score standardization centers data around zero with unit variance. Robust scaling handles outliers, and normalization ensures gradient-based algorithms converge efficiently."""
+            elif "outliers" in question.lower():
+                answer = """Outliers are detected using statistical methods like z-scores, IQR ranges, and isolation forests. Handling approaches include removal, transformation, or robust modeling. Understanding outlier causes helps determine whether they represent errors, rare events, or important phenomena."""
+            else:  # correlation vs causation
+                answer = """Correlation measures the relationship between variables, while causation implies one variable influences another. Spurious correlations can appear due to confounding factors, and establishing causation requires controlled experiments or rigorous statistical methods like regression discontinuity design."""
+        else:  # ai_concepts
+            if "approaches" in question.lower() and "artificial intelligence" in question.lower():
+                answer = """AI encompasses symbolic AI (rule-based systems), connectionist AI (neural networks), evolutionary algorithms, and hybrid approaches. Modern AI combines deep learning for pattern recognition with symbolic reasoning for logical inference. Each approach has strengths for different problem domains."""
+            elif "neural networks" in question.lower() and "learning" in question.lower():
+                answer = """Neural networks simulate human learning through interconnected nodes called neurons. Forward propagation passes inputs through layers, while backpropagation adjusts weights using gradient descent. Activation functions introduce non-linearity, enabling complex function approximation and feature learning."""
+            elif "ethical" in question.lower() and "ai" in question.lower():
+                answer = """AI ethics addresses bias in training data, transparency in decision-making, privacy concerns, and societal impacts. Fairness, accountability, and human oversight are crucial. Ethical frameworks like those from the IEEE and EU AI Act guide responsible AI development and deployment."""
+            elif "reinforcement learning" in question.lower():
+                answer = """Reinforcement learning trains agents through reward-based feedback. Agents explore environments, learn from consequences, and maximize cumulative rewards. Q-learning and policy gradients are core algorithms, with applications in robotics, game playing, and autonomous systems."""
+            else:  # limitations
+                answer = """Current AI systems lack true understanding, struggle with abstract reasoning, and can exhibit unpredictable failures. They require massive data and computation, and face challenges with common sense, creativity, and emotional intelligence. Safety, alignment, and robustness remain active research areas."""
+
+        final_output = f"Question: {question}\n\nAnswer: {answer}"
+
+        # Store the final output for use by _generate_final_output method
+        self._simulation_final_output = final_output
+
+        reasoning_trace = ReasoningTrace(
+            thoughts=reasoning_steps,
+            confidence_score=0.85  # High confidence for curated content
+        )
+
+        return scenario, reasoning_trace
