@@ -65,17 +65,38 @@ ollama pull deepseek-r1-1.5b
 
 ## 🚀 Quick Start
 
-### Generate a Single Sample
+### Web Interface (Recommended)
+```bash
+# Install dependencies (including Streamlit)
+pip install -r requirements.txt
+
+# Launch the web interface
+streamlit run app.py
+```
+
+### Command Line Interface
+
+#### Generate a Single Sample
 ```bash
 python main.py --mode generate
 ```
 
-### Generate and Export a Batch
+#### Generate with Detailed Reasoning (--verbose)
+```bash
+python main.py --mode generate --verbose
+```
+
+#### Generate with Full Debug Info (--debug)
+```bash
+python main.py --mode generate --debug
+```
+
+#### Generate and Export a Batch
 ```bash
 python main.py --mode export --batch-size 50
 ```
 
-### Full Batch with Statistics
+#### Full Batch with Statistics
 ```bash
 python main.py --mode batch --batch-size 100 --temperature 0.9
 ```
