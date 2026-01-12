@@ -30,16 +30,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize session state
-if 'pipeline' not in st.session_state:
-    st.session_state.pipeline = None
-if 'samples' not in st.session_state:
-    st.session_state.samples = []
-if 'stats' not in st.session_state:
-    st.session_state.stats = {}
-if 'ollama_status' not in st.session_state:
-    st.session_state.ollama_status = check_ollama_status()
-
 def check_ollama_status():
     """Check if Ollama is available and running"""
     try:
@@ -59,6 +49,14 @@ def start_ollama():
         return check_ollama_status()
     except Exception:
         return False
+
+# Initialize session state
+if 'pipeline' not in st.session_state:
+    st.session_state.pipeline = None
+if 'samples' not in st.session_state:
+    st.session_state.samples = []
+if 'stats' not in st.session_state:
+    st.session_state.stats = {}
 
 def main():
     """Main Streamlit application"""
