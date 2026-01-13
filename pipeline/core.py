@@ -183,6 +183,73 @@ class SyndgenPipeline:
             logger.info("Falling back to enhanced simulation mode")
             return self._enhanced_simulation_inference(seed)
 
+    def _simulation_critic_evaluation(self, sample: GeneratedSample, evaluation_start: float) -> CriticEvaluation:
+        """
+        Simulation mode critic evaluation that provides basic quality assessment
+        without requiring LLM access.
+
+        Args:
+            sample: Generated sample to evaluate
+            evaluation_start: Time when evaluation started
+
+        Returns:
+            CriticEvaluation with basic assessment
+        """
+        # Basic quality checks
+        has_question = "Question:" in sample.final_output.lower()
+        has_answer = "Answer:" in sample.final_output.lower()
+        reasoning_length = len(sample.reasoning_trace.thoughts)
+        output_length = len(sample.final_output.strip())
+
+        # Scoring logic
+        logic_score = 3  # Base score
+        if has_question and has_answer:
+            logic_score += 1  # +1 for proper Q&A format
+        if reasoning_length >= 3:
+            logic_score += 1  # +1 for detailed reasoning
+        if output_length > 100:
+            logic_score = min(5, logic_score + 1)  # +1 for substantial content, cap at 5
+
+        coherence_score = 3  # Base score
+        if reasoning_length >= 3:
+            coherence_score += 1  # +1 for coherent reasoning steps
+        if has_question and has_answer:
+            coherence_score += 1  # +1 for logical Q&A structure
+
+        # Validation based on quality threshold
+        passes_validation = logic_score >= self.config.rejection_threshold
+
+        # Generate feedback
+        feedback_parts = []
+        if has_question and has_answer:
+            feedback_parts.append("Proper question-answer format maintained")
+        else:
+            feedback_parts.append("Consider using clear question-answer format")
+
+        if reasoning_length >= 3:
+            feedback_parts.append("Reasoning trace shows good depth")
+        else:
+            feedback_parts.append("Consider adding more detailed reasoning steps")
+
+        if output_length > 100:
+            feedback_parts.append("Content length is substantial")
+        else:
+            feedback_parts.append("Consider expanding the answer for more detail")
+
+        feedback_text = ". ".join(feedback_parts)
+
+        evaluation_time = time.time() - evaluation_start
+        evaluation_time = max(evaluation_time, 0.001)  # Ensure positive time
+
+        return CriticEvaluation(
+            sample_id=sample.id,
+            logic_score=logic_score,
+            coherence_score=coherence_score,
+            feedback=feedback_text,
+            passes_validation=passes_validation,
+            evaluation_time=evaluation_time
+        )
+
     def _generate_final_output(self, scenario: str, reasoning_trace: ReasoningTrace) -> str:
         """
         Generate final output based on scenario and reasoning
@@ -259,7 +326,20 @@ class SyndgenPipeline:
         """
         evaluation_start = time.time()
 
+        # Check if we should use simulation mode for evaluation
+        if not self._is_ollama_available():
+            logger.info("Using simulation mode for critic evaluation")
+            return self._simulation_critic_evaluation(sample, evaluation_start)
+
         try:
+            # Try to get available models for evaluation
+            available_models = self._get_available_models()
+            model_name = self._select_best_model(available_models, self.config.model_name)
+
+            if not model_name:
+                logger.warning("No suitable LLM models available for critic evaluation, falling back to simulation")
+                return self._simulation_critic_evaluation(sample, evaluation_start)
+
             # Create critic prompt for LLM-based evaluation
             reasoning_text = '\n'.join([f"{i+1}. {thought}" for i, thought in enumerate(sample.reasoning_trace.thoughts)])
             critic_prompt = f"""You are an expert AI critic evaluating the quality of generated content.
@@ -290,8 +370,6 @@ class SyndgenPipeline:
             </evaluation>"""
 
             # Call Ollama for critic evaluation
-            # Use model name as-is (Ollama expects the full model name with hyphens)
-            model_name = self.config.model_name
             response = ollama.generate(
                 model=model_name,
                 prompt=critic_prompt,
@@ -326,16 +404,7 @@ class SyndgenPipeline:
 
         except Exception as e:
             logger.error(f"Error in LLM critic evaluation: {e}")
-            # Fallback to basic evaluation
-            has_question = "Question:" in sample.final_output
-            has_answer = "Answer:" in sample.final_output
-            reasoning_coherent = len(sample.reasoning_trace.thoughts) >= 3
-
-            logic_score = 5 if (has_question and has_answer and reasoning_coherent) else 3
-            coherence_score = 5 if reasoning_coherent else 3
-            passes_validation = logic_score >= self.config.rejection_threshold
-
-            feedback_text = "Fallback evaluation: " + ("Sample meets basic criteria" if passes_validation else "Sample needs improvement")
+            return self._simulation_critic_evaluation(sample, evaluation_start)
 
         evaluation_time = time.time() - evaluation_start
         evaluation_time = max(evaluation_time, 0.001)  # Ensure positive time
