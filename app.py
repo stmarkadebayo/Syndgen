@@ -96,7 +96,7 @@ def main():
 
         model_name = st.selectbox(
             "Model",
-            ["deepseek-r1-1.5b", "llama2:7b", "mistral:7b"],
+            ["deepseek-r1:1.5b", "llama2:7b", "mistral:7b"],
             help="LLM model to use for generation"
         )
 
