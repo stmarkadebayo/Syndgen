@@ -59,7 +59,7 @@ class DPOFormat(BaseModel):
 
 class GenerationConfig(BaseModel):
     """Configuration for data generation"""
-    model_name: str = Field("deepseek-r1-1.5b", description="LLM model to use")
+    model_name: str = Field("deepseek-r1:1.5b", description="LLM model to use")
     temperature: float = Field(0.7, description="Sampling temperature", ge=0, le=2)
     max_tokens: int = Field(512, description="Maximum tokens to generate", ge=50, le=2048)
     top_p: float = Field(0.9, description="Nucleus sampling probability", ge=0, le=1)
