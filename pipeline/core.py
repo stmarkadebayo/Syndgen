@@ -19,9 +19,8 @@ from core.schema import (
     PipelineStats
 )
 import logging
-import ollama
 import re
-from utils.helpers import setup_ollama_client
+from utils.helpers import setup_ollama_client, is_ollama_running, list_ollama_models
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -52,14 +51,14 @@ class SyndgenPipeline:
         seed_data = self._seed_layer(seed)
 
         # Stage 2: Inference Layer (Generator)
-        scenario, reasoning_trace = self._inference_layer(seed_data)
+        scenario, reasoning_trace, final_output = self._inference_layer(seed_data)
 
         # Create initial sample
         sample = GeneratedSample(
             seed=seed_data,
             scenario=scenario,
             reasoning_trace=reasoning_trace,
-            final_output=self._generate_final_output(scenario, reasoning_trace),
+            final_output=final_output or self._generate_final_output(scenario, reasoning_trace),
             metadata={"generation_time": time.time() - start_time}
         )
 
@@ -92,7 +91,7 @@ class SyndgenPipeline:
             # Generate a basic seed (in real implementation, this would use LLM)
             return "Generate a sample question-answer pair about machine learning concepts"
 
-    def _inference_layer(self, seed: str) -> tuple[str, ReasoningTrace]:
+    def _inference_layer(self, seed: str) -> tuple[str, ReasoningTrace, Optional[str]]:
         """
         Inference Layer: Generate scenario and reasoning trace using LLM
 
@@ -137,7 +136,7 @@ class SyndgenPipeline:
             Ensure the reasoning trace shows clear logical progression and the final output is high-quality and informative."""
 
             # Call Ollama API
-            response = ollama.generate(
+            response = self.ollama_client.generate(
                 model=model_name,
                 prompt=cot_prompt,
                 options={
@@ -176,7 +175,7 @@ class SyndgenPipeline:
                 confidence_score=min(0.95, 0.7 + len(reasoning_steps) * 0.05)  # Higher confidence for more detailed reasoning
             )
 
-            return scenario, reasoning_trace
+            return scenario, reasoning_trace, final_output
 
         except Exception as e:
             logger.error(f"Error in LLM inference: {e}")
@@ -196,8 +195,8 @@ class SyndgenPipeline:
             CriticEvaluation with basic assessment
         """
         # Basic quality checks
-        has_question = "Question:" in sample.final_output.lower()
-        has_answer = "Answer:" in sample.final_output.lower()
+        has_question = "question:" in sample.final_output.lower()
+        has_answer = "answer:" in sample.final_output.lower()
         reasoning_length = len(sample.reasoning_trace.thoughts)
         output_length = len(sample.final_output.strip())
 
@@ -262,22 +261,14 @@ class SyndgenPipeline:
             Final generated output
         """
         # Check if we have final output from enhanced simulation
-        if hasattr(self, '_simulation_final_output'):
-            return self._simulation_final_output
-
-        # This method is now mostly used as fallback
-        # The main output comes from LLM in _inference_layer
-        if not hasattr(self, '_llm_final_output'):
-            # Fallback Q&A generation
-            topic = "machine learning concepts" if "machine learning" in scenario.lower() else "AI concepts"
-            return (
-                f"Question: What are the key concepts in {topic}?\n\n"
-                f"Answer: {topic.replace('concepts', '').strip()} includes fundamental ideas like "
-                f"algorithms, data processing, model evaluation, and practical applications. "
-                f"Understanding these concepts is essential for building effective AI systems."
-            )
-        else:
-            return self._llm_final_output
+        # Fallback Q&A generation
+        topic = "machine learning concepts" if "machine learning" in scenario.lower() else "AI concepts"
+        return (
+            f"Question: What are the key concepts in {topic}?\n\n"
+            f"Answer: {topic.replace('concepts', '').strip()} includes fundamental ideas like "
+            f"algorithms, data processing, model evaluation, and practical applications. "
+            f"Understanding these concepts is essential for building effective AI systems."
+        )
 
     def _generate_final_output_from_reasoning(self, reasoning_steps: List[str], seed: str) -> str:
         """Fallback method to generate output from reasoning steps"""
@@ -295,7 +286,9 @@ class SyndgenPipeline:
 
             # Use model name as-is (Ollama expects the full model name with hyphens)
             model_name = self.config.model_name
-            response = ollama.generate(
+            if not self.ollama_client:
+                raise RuntimeError("Ollama client not available")
+            response = self.ollama_client.generate(
                 model=model_name,
                 prompt=output_prompt,
                 options={
@@ -370,7 +363,7 @@ class SyndgenPipeline:
             </evaluation>"""
 
             # Call Ollama for critic evaluation
-            response = ollama.generate(
+            response = self.ollama_client.generate(
                 model=model_name,
                 prompt=critic_prompt,
                 options={
@@ -494,20 +487,11 @@ class SyndgenPipeline:
 
     def _is_ollama_available(self) -> bool:
         """Check if Ollama is available and running"""
-        try:
-            # Try to list models to check if Ollama is running
-            ollama.list()
-            return True
-        except Exception:
-            return False
+        return is_ollama_running(self.ollama_client)
 
     def _get_available_models(self) -> List[str]:
         """Get list of available Ollama models"""
-        try:
-            models_info = ollama.list()
-            return [model['name'] for model in models_info.get('models', [])]
-        except Exception:
-            return []
+        return list_ollama_models(self.ollama_client)
 
     def _select_best_model(self, available_models: List[str], preferred_model: str) -> Optional[str]:
         """Select the best available model from preferences"""
@@ -516,7 +500,7 @@ class SyndgenPipeline:
 
         # Fallback model preferences
         fallback_models = [
-            'deepseek-r1-1.5b',
+            'deepseek-r1:1.5b',
             'llama2:7b',
             'mistral:7b',
             'codellama:7b',
@@ -530,7 +514,7 @@ class SyndgenPipeline:
 
         return None
 
-    def _enhanced_simulation_inference(self, seed: str) -> tuple[str, ReasoningTrace]:
+    def _enhanced_simulation_inference(self, seed: str) -> tuple[str, ReasoningTrace, str]:
         """
         Enhanced simulation mode that generates diverse, realistic synthetic data
         without requiring LLM access.
@@ -676,11 +660,9 @@ class SyndgenPipeline:
         final_output = f"Question: {question}\n\nAnswer: {answer}"
 
         # Store the final output for use by _generate_final_output method
-        self._simulation_final_output = final_output
-
         reasoning_trace = ReasoningTrace(
             thoughts=reasoning_steps,
             confidence_score=0.85  # High confidence for curated content
         )
 
-        return scenario, reasoning_trace
+        return scenario, reasoning_trace, final_output
