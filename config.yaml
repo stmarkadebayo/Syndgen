@@ -1,0 +1,42 @@
+# Syndgen Configuration File
+# This file contains default settings and configurations for the Syndgen application
+
+# Ollama Configuration
+ollama:
+  host: "http://localhost:11434"
+  default_model: "deepseek-r1:1.5b"
+  fallback_models:
+    - "deepseek-r1:1.5b"
+    - "llama2:7b"
+    - "mistral:7b"
+
+# Generation Configuration
+generation:
+  default_temperature: 0.7
+  default_max_tokens: 512
+  default_rejection_threshold: 4
+  max_batch_size: 100
+  max_retries: 1
+
+# Export Configuration
+export:
+  default_formats: ["JSONL"]
+  default_output_dir: "output"
+  include_reasoning: true
+
+# UI Configuration
+ui:
+  page_title: "Syndgen - Synthetic Data Generator"
+  page_icon: "S"
+  layout: "wide"
+  sidebar_state: "expanded"
+
+# Logging Configuration
+logging:
+  level: "WARNING"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Cache Configuration
+cache:
+  ollama_status_timeout: 30  # seconds
+  model_list_timeout: 60     # seconds
