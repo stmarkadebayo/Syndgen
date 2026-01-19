@@ -10,38 +10,38 @@
 
 ---
 
-## 🚀 Executive Summary
+## Executive Summary
 
 **Syndgen** is a localized synthetic data generation pipeline that automates the creation of high-quality, logic-dense datasets for fine-tuning smaller specialized models or testing software systems. Unlike standard generators, Syndgen utilizes **Chain-of-Thought (CoT)** distillation and an automated **"LLM-as-a-Judge"** critic loop to ensure data veracity without API costs or privacy leaks.
 
 ---
 
-## 🎯 Key Features
+## Key Features
 
-### ✅ **Tri-Stage Pipeline Architecture**
+### **Tri-Stage Pipeline Architecture**
 1. **Seed Layer**: Processes user-defined parameters or "seed" examples
 2. **Inference Layer**: DeepSeek R1 1.5B generates scenarios with reasoning traces
 3. **Audit Layer**: Secondary evaluation ensures logical consistency
 
-### ✅ **Quality Control System**
+### **Quality Control System**
 - **Rejection Sampling**: Automatic filtering of low-quality data
 - **Logic Scoring**: 1-5 scale evaluation by critic model
 - **Confidence Metrics**: Built-in quality assurance
 
-### ✅ **Multiple Export Formats**
+### **Multiple Export Formats**
 - **JSONL**: Standard JSON Lines format
 - **Parquet**: Columnar storage for big data
 - **SFT**: Supervised Fine-Tuning format
 - **DPO**: Direct Preference Optimization format
 
-### ✅ **Performance Monitoring**
+### **Performance Monitoring**
 - Real-time statistics tracking
 - Rejection rate analysis
 - Generation speed metrics
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 - Python 3.10+
@@ -58,12 +58,12 @@ pip install -r requirements.txt
 curl -fsSL https://ollama.com/install.sh | sh
 
 # Pull DeepSeek R1 1.5B model
-ollama pull deepseek-r1-1.5b
+ollama pull deepseek-r1:1.5b
 ```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Web Interface (Recommended)
 ```bash
@@ -103,12 +103,12 @@ python main.py --mode batch --batch-size 100 --temperature 0.9
 
 ---
 
-## 🎛️ Configuration Options
+## Configuration Options
 
 ### Generation Configuration
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--model` | `deepseek-r1-1.5b` | LLM model to use |
+| `--model` | `deepseek-r1:1.5b` | LLM model to use |
 | `--temperature` | `0.7` | Sampling temperature (0.0-2.0) |
 | `--max-tokens` | `512` | Maximum tokens to generate |
 | `--rejection-threshold` | `4` | Minimum logic score to accept (1-5) |
@@ -136,29 +136,29 @@ python main.py \
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 syndgen/
-├── core/                  # Core data models and schemas
-│   └── schema.py          # Pydantic models for data validation
-├── export/                # Export functionality
-│   └── formats.py         # Multiple export format implementations
-├── pipeline/              # Main pipeline logic
-│   └── core.py            # Tri-stage pipeline implementation
-├── utils/                 # Utility functions
-│   └── helpers.py         # Helper functions and utilities
-├── cli.py                 # Command-line interface
-├── __init__.py            # Package initialization
-├── main.py                # Main entry point
-├── requirements.txt       # Dependencies
-├── .env                   # Environment configuration
-└── README.md              # Project documentation
+ core/                  # Core data models and schemas
+    schema.py          # Pydantic models for data validation
+ export/                # Export functionality
+    formats.py         # Multiple export format implementations
+ pipeline/              # Main pipeline logic
+    core.py            # Tri-stage pipeline implementation
+ utils/                 # Utility functions
+    helpers.py         # Helper functions and utilities
+ cli.py                 # Command-line interface
+ __init__.py            # Package initialization
+ main.py                # Main entry point
+ requirements.txt       # Dependencies
+ .env                   # Environment configuration
+ README.md              # Project documentation
 ```
 
 ---
 
-## 🔧 Architecture Overview
+## Architecture Overview
 
 ### 1. Seed Layer
 - Processes input seeds or generates default prompts
@@ -177,7 +177,7 @@ syndgen/
 
 ---
 
-## 📊 Data Quality Metrics
+## Data Quality Metrics
 
 ### Sample Evaluation Criteria
 - **Logic Score**: 1-5 scale for logical consistency
@@ -192,31 +192,31 @@ syndgen/
 
 ---
 
-## 🛠️ Development Roadmap
+## Development Roadmap
 
-### ✅ Phase 1: Core CLI Tool (Complete)
+### Phase 1: Core CLI Tool (Complete)
 - Basic Q&A pair generation
 - Tri-stage pipeline implementation
 - Multiple export formats
 
-### 🚧 Phase 2: Critic Loop Enhancement
+### Phase 2: Critic Loop Enhancement
 - Advanced rejection sampling
 - Multi-pass validation
 - Enhanced quality metrics
 
-### 🔜 Phase 3: UI Integration
+### Phase 3: UI Integration
 - Gradio/Streamlit interface
 - Real-time monitoring dashboard
 - Interactive generation controls
 
-### 🌟 Phase 4: Multi-Model Support
+### Phase 4: Multi-Model Support
 - Multiple LLM integration
 - Model comparison features
 - Hybrid generation approaches
 
 ---
 
-## 📈 Performance Targets
+## Performance Targets
 
 | Metric | Target | Current Status |
 |--------|--------|----------------|
@@ -227,7 +227,7 @@ syndgen/
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please follow these steps:
 
@@ -254,13 +254,13 @@ flake8 .
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 📞 Support & Contact
+## Support & Contact
 
 For issues, questions, or suggestions:
 - **GitHub Issues**: [https://github.com/stmarkadebayo/Syndgen/issues](https://github.com/stmarkadebayo/Syndgen/issues)
@@ -268,7 +268,7 @@ For issues, questions, or suggestions:
 
 ---
 
-## 🎓 Example Use Cases
+## Example Use Cases
 
 ### 1. Machine Learning Dataset Generation
 ```bash
@@ -290,7 +290,7 @@ python main.py --mode batch --batch-size 200 --rejection-threshold 5
 
 ---
 
-## 🔮 Future Enhancements
+## Future Enhancements
 
 - **Multi-LLM Support**: Integration with Llama, Mistral, etc.
 - **Advanced Validation**: Semantic similarity checking
@@ -300,4 +300,4 @@ python main.py --mode batch --batch-size 200 --rejection-threshold 5
 
 ---
 
-**Syndgen** - Empowering local, private, and high-quality synthetic data generation for the AI era! 🚀
+**Syndgen** - Empowering local, private, and high-quality synthetic data generation for the AI era! 

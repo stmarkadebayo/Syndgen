@@ -56,7 +56,7 @@ The system must capture the `<think>` tags from DeepSeek R1. This allows the fin
 
 Every generated record must be scored by a secondary prompt.
 
-* **Metric:** Logic Score (1–5).
+* **Metric:** Logic Score (15).
 * **Action:** If Score < 4, the record is discarded or sent back for one "Regeneration" attempt.
 
 ### FR3: Export Modules
@@ -71,7 +71,7 @@ Support for multiple downstream formats:
 ## 6. Success Metrics (KPIs)
 
 * **Inference Speed:** Average seconds per valid record (Target: < 5s on 8GB VRAM).
-* **Rejection Rate:** Percentage of samples flagged by the Critic (Target: 10–20% for high-quality thresholds).
+* **Rejection Rate:** Percentage of samples flagged by the Critic (Target: 1020% for high-quality thresholds).
 * **Diversity Score:** Semantic uniqueness between generated samples (measured via cosine similarity).
 
 ---

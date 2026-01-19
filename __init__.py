@@ -25,7 +25,7 @@ from .export.formats import DataExporter
 from .cli import main
 
 # Package-level constants
-DEFAULT_MODEL = "deepseek-r1-1.5b"
+DEFAULT_MODEL = "deepseek-r1:1.5b"
 DEFAULT_OUTPUT_DIR = "output"
 DEFAULT_EXPORT_FORMAT = "jsonl"
 
