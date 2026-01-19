@@ -7,19 +7,28 @@ Command-line interface for the Syndgen synthetic data generation pipeline.
 import argparse
 import sys
 import logging
-from typing import Optional
 from core.schema import GenerationConfig, ExportConfig
 from pipeline.core import SyndgenPipeline
 from export.formats import DataExporter
-from utils.helpers import setup_logging, print_stats
+from utils.helpers import (
+    setup_logging,
+    print_stats,
+    load_config,
+    get_ollama_client,
+    list_ollama_models
+)
 import os
 import subprocess
 import platform
 import time
-import ollama
 
 def main():
     """Main CLI entry point"""
+    config = load_config()
+    ollama_config = config.get("ollama", {})
+    generation_config = config.get("generation", {})
+    export_config = config.get("export", {})
+
     parser = argparse.ArgumentParser(
         description="Syndgen - Localized Synthetic Data Generation & Distillation Engine",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -34,10 +43,13 @@ def main():
     )
 
     # Generation arguments
+    max_batch_size = generation_config.get("max_batch_size", 100)
+    batch_default = min(10, max_batch_size)
+
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=10,
+        default=batch_default,
         help="Number of samples to generate"
     )
 
@@ -51,28 +63,28 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="deepseek-r1-1.5b",
+        default=ollama_config.get("default_model", "deepseek-r1:1.5b"),
         help="LLM model to use"
     )
 
     parser.add_argument(
         "--temperature",
         type=float,
-        default=0.7,
+        default=generation_config.get("default_temperature", 0.7),
         help="Sampling temperature"
     )
 
     parser.add_argument(
         "--max-tokens",
         type=int,
-        default=512,
+        default=generation_config.get("default_max_tokens", 512),
         help="Maximum tokens to generate"
     )
 
     parser.add_argument(
         "--rejection-threshold",
         type=int,
-        default=4,
+        default=generation_config.get("default_rejection_threshold", 4),
         choices=range(1, 6),
         help="Minimum logic score to accept (1-5)"
     )
@@ -80,15 +92,17 @@ def main():
     parser.add_argument(
         "--max-retries",
         type=int,
-        default=1,
+        default=generation_config.get("max_retries", 1),
         help="Maximum regeneration attempts"
     )
 
     # Export configuration
+    default_formats = export_config.get("default_formats") or ["JSONL"]
+
     parser.add_argument(
         "--export-format",
         type=str,
-        default="jsonl",
+        default=default_formats[0].lower(),
         choices=["jsonl", "parquet"],
         help="Export format"
     )
@@ -96,14 +110,14 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="output",
+        default=export_config.get("default_output_dir", "output"),
         help="Output directory"
     )
 
     parser.add_argument(
         "--include-reasoning",
         action="store_true",
-        default=True,
+        default=export_config.get("include_reasoning", True),
         help="Include reasoning traces in export"
     )
 
@@ -149,7 +163,7 @@ def main():
     else:
         operational_mode = "Enhanced Simulation Mode (Ollama not available)"
 
-    print(f"🔧 Operational Mode: {operational_mode}")
+    print(f"[INFO] Operational Mode: {operational_mode}")
     logging.info(f"Starting Syndgen pipeline in {operational_mode}...")
 
     try:
@@ -183,26 +197,26 @@ def main():
 
             # Show verbose/debug output
             if args.verbose or args.debug:
-                print(f"\n📋 Sample Details:")
+                print(f"\n[DETAILS] Sample Details:")
                 print(f"   Scenario: {sample.scenario}")
                 print(f"   Seed: {sample.seed or 'None'}")
                 print(f"   Created: {sample.created_at}")
                 print(f"   Generation Time: {sample.metadata.get('generation_time', 0):.3f}s")
 
                 if args.verbose:
-                    print(f"\n🧠 Reasoning Trace (Logic Score: {sample.reasoning_trace.logic_score}):")
+                    print(f"\n[TRACE] Reasoning Trace (Logic Score: {sample.reasoning_trace.logic_score}):")
                     for i, thought in enumerate(sample.reasoning_trace.thoughts, 1):
                         print(f"   {i}. {thought}")
                     print(f"   Confidence: {sample.reasoning_trace.confidence_score:.2f}")
 
                 if args.debug:
-                    print(f"\n🔍 Debug Information:")
+                    print(f"\n[DEBUG] Debug Information:")
                     print(f"   Model: {gen_config.model_name}")
                     print(f"   Temperature: {gen_config.temperature}")
                     print(f"   Max Tokens: {gen_config.max_tokens}")
                     print(f"   Rejection Threshold: {gen_config.rejection_threshold}")
 
-            print(f"\n💬 Final Output:")
+            print(f"\n[OUTPUT] Final Output:")
             print(sample.final_output)
 
         elif args.mode == "export":
@@ -260,17 +274,20 @@ def check_and_start_ollama():
     Returns True if Ollama is available, False otherwise.
     """
     try:
-        # Test if Ollama server is available
-        ollama.show()
-        print("✅ Ollama server is running")
+        client = get_ollama_client()
+        if not client:
+            print("[WARN] Ollama package not installed. Install it to enable LLM mode.")
+            return False
+        client.list()
+        print("[OK] Ollama server is running")
         return True
     except Exception:
-        print("🔄 Ollama server not detected. Attempting to start automatically...")
+        print("[WARN] Ollama server not detected. Attempting to start automatically...")
 
         try:
             # Start Ollama server based on platform
             if platform.system() == "Windows":
-                print("💻 Starting Ollama server on Windows...")
+                print("[INFO] Starting Ollama server on Windows...")
                 # Try to start Ollama server directly without new window
                 try:
                     # First check if ollama.exe exists in PATH
@@ -278,52 +295,57 @@ def check_and_start_ollama():
                     # Start Ollama server in background
                     subprocess.Popen(["ollama", "serve"], creationflags=subprocess.CREATE_NO_WINDOW)
                 except (subprocess.CalledProcessError, FileNotFoundError):
-                    print("⚠️ Ollama not found in PATH. Please ensure Ollama is installed and in your PATH.")
-                    print("   Download from: https://ollama.com/download")
+                    print("[WARN] Ollama not found in PATH. Please ensure Ollama is installed and in your PATH.")
+                    print("       Download from: https://ollama.com/download")
                     return False
             else:
-                print("🐧 Starting Ollama server on Unix-like system...")
+                print("[INFO] Starting Ollama server on Unix-like system...")
                 subprocess.Popen(["ollama", "serve"])
 
             # Wait for server to start
-            print("⏳ Waiting for Ollama server to start...")
+            print("[INFO] Waiting for Ollama server to start...")
             time.sleep(8)  # Increased wait time
 
             # Verify it started and try to pull model
             try:
-                ollama.show()
-                print("✅ Ollama server started successfully!")
+                client = get_ollama_client()
+                if not client:
+                    print("[WARN] Ollama package not installed. Install it to enable LLM mode.")
+                    return False
+                client.list()
+                print("[OK] Ollama server started successfully!")
 
                 # Check if model exists, if not pull it
                 try:
-                    models = ollama.list()['models']
-                    model_names = [model['name'] for model in models]
-                    if "deepseek-r1-1.5b" not in model_names:
-                        print("📥 Pulling DeepSeek model (this may take a few minutes)...")
-                        ollama.pull("deepseek-r1-1.5b")
-                        print("✅ Model pulled successfully!")
-                except:
-                    print("⚠️ Could not check/pull model automatically")
+                    model_names = list_ollama_models(client)
+                    if "deepseek-r1:1.5b" not in model_names:
+                        print("[INFO] Pulling DeepSeek model (this may take a few minutes)...")
+                        client.pull("deepseek-r1:1.5b")
+                        print("[OK] Model pulled successfully!")
+                except Exception:
+                    print("[WARN] Could not check/pull model automatically")
 
                 return True
-            except:
-                print("❌ Ollama server started but not responding. Continuing in simulation mode.")
+            except Exception:
+                print("[WARN] Ollama server started but not responding. Continuing in simulation mode.")
                 return False
         except Exception as e:
-            print(f"❌ Could not start Ollama automatically: {e}")
-            print("💡 Please start Ollama manually:")
-            print("   1. Run: ollama serve")
-            print("   2. In another terminal: ollama pull deepseek-r1-1.5b")
-            print("   3. Restart Syndgen")
+            print(f"[ERROR] Could not start Ollama automatically: {e}")
+            print("[INFO] Please start Ollama manually:")
+            print("       1. Run: ollama serve")
+            print("       2. In another terminal: ollama pull deepseek-r1:1.5b")
+            print("       3. Restart Syndgen")
             return False
 
+
 def print_help():
+
     """Print help information"""
     print("""
 Syndgen - Localized Synthetic Data Generation & Distillation Engine
 
 Usage:
-  python -m syndgen [OPTIONS]
+  python main.py [OPTIONS]
 
 Modes:
   generate      Generate a single sample
@@ -332,16 +354,16 @@ Modes:
 
 Examples:
   # Generate single sample
-  python -m syndgen --mode generate
+  python main.py --mode generate
 
   # Generate and export 50 samples
-  python -m syndgen --mode export --batch-size 50
+  python main.py --mode export --batch-size 50
 
   # Generate batch with custom settings
-  python -m syndgen --mode batch --batch-size 100 --temperature 0.9 --rejection-threshold 3
+  python main.py --mode batch --batch-size 100 --temperature 0.9 --rejection-threshold 3
 
   # Export to parquet with compression
-  python -m syndgen --mode export --export-format parquet --compression gzip
+  python main.py --mode export --export-format parquet --compression gzip
 """)
 
 if __name__ == "__main__":
