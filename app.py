@@ -14,29 +14,37 @@ import json
 from core.schema import GenerationConfig, ExportConfig
 from pipeline.core import SyndgenPipeline
 from export.formats import DataExporter
-from utils.helpers import setup_logging
+from utils.helpers import (
+    setup_logging,
+    load_config,
+    get_ollama_client,
+    is_ollama_running,
+    list_ollama_models
+)
 import logging
-import ollama
 import subprocess
 import platform
 import sys
 import os
 
+config = load_config()
+ollama_config = config.get('ollama', {})
+generation_config = config.get('generation', {})
+export_config = config.get('export', {})
+ui_config = config.get('ui', {})
+
 # Configure page
 st.set_page_config(
-    page_title="Syndgen - Synthetic Data Generator",
-    page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title=ui_config.get('page_title', 'Syndgen - Synthetic Data Generator'),
+    page_icon=ui_config.get('page_icon', 'S'),
+    layout=ui_config.get('layout', 'wide'),
+    initial_sidebar_state=ui_config.get('sidebar_state', 'expanded')
 )
 
 def check_ollama_status():
     """Check if Ollama is available and running"""
-    try:
-        ollama.show()
-        return True
-    except Exception:
-        return False
+    client = get_ollama_client()
+    return is_ollama_running(client)
 
 def start_ollama():
     """Attempt to start Ollama server"""
@@ -50,6 +58,7 @@ def start_ollama():
     except Exception:
         return False
 
+
 # Initialize session state
 if 'pipeline' not in st.session_state:
     st.session_state.pipeline = None
@@ -57,12 +66,16 @@ if 'samples' not in st.session_state:
     st.session_state.samples = []
 if 'stats' not in st.session_state:
     st.session_state.stats = {}
+if 'last_config' not in st.session_state:
+    st.session_state.last_config = None
+if 'ollama_status_cache' not in st.session_state:
+    st.session_state.ollama_status_cache = {'status': False, 'timestamp': 0, 'models': []}
 
 def main():
     """Main Streamlit application"""
 
     # Title and description
-    st.title("🤖 Syndgen - Synthetic Data Generator")
+    st.title("Syndgen - Synthetic Data Generator")
     st.markdown("""
     **Localized Synthetic Data Generation & Distillation Engine**
 
@@ -71,16 +84,21 @@ def main():
 
     # Sidebar configuration
     with st.sidebar:
-        st.header("⚙️ Configuration")
-
-        # Ollama status
+        st.header("Configuration")
+        # Ollama status and model detection
         ollama_status = check_ollama_status()
+        available_models = []
         if ollama_status:
-            st.success("✅ Ollama Connected")
-            operational_mode = "LLM Mode"
+            try:
+                available_models = list_ollama_models(get_ollama_client())
+                st.success(f"[OK] Ollama Connected ({len(available_models)} models available)")
+                operational_mode = "LLM Mode"
+            except Exception:
+                st.warning("[WARN] Ollama running but unable to list models")
+                operational_mode = "Enhanced Simulation Mode"
         else:
-            st.error("❌ Ollama Not Available")
-            if st.button("🔄 Try to Start Ollama"):
+            st.error("[ERROR] Ollama Not Available")
+            if st.button("Try to Start Ollama"):
                 with st.spinner("Starting Ollama..."):
                     if start_ollama():
                         st.success("Ollama started successfully!")
@@ -92,11 +110,21 @@ def main():
         st.info(f"**Mode:** {operational_mode}")
 
         # Generation parameters
-        st.subheader("🎯 Generation Settings")
+        st.subheader("Generation Settings")
+
+        # Dynamic model selection based on available models
+        fallback_models = ollama_config.get("fallback_models", ["deepseek-r1:1.5b", "llama2:7b", "mistral:7b"])
+        default_model = ollama_config.get("default_model", "deepseek-r1:1.5b")
+        if available_models:
+            # Put available models first, then fallback options
+            model_options = available_models + [m for m in fallback_models if m not in available_models]
+        else:
+            model_options = fallback_models
 
         model_name = st.selectbox(
             "Model",
-            ["deepseek-r1:1.5b", "llama2:7b", "mistral:7b"],
+            model_options,
+            index=model_options.index(default_model) if default_model in model_options else 0,
             help="LLM model to use for generation"
         )
 
@@ -104,7 +132,7 @@ def main():
             "Temperature",
             min_value=0.0,
             max_value=2.0,
-            value=0.7,
+            value=generation_config.get("default_temperature", 0.7),
             step=0.1,
             help="Sampling temperature (higher = more creative)"
         )
@@ -113,7 +141,7 @@ def main():
             "Max Tokens",
             min_value=128,
             max_value=1024,
-            value=512,
+            value=generation_config.get("default_max_tokens", 512),
             step=64,
             help="Maximum tokens to generate"
         )
@@ -122,43 +150,43 @@ def main():
             "Quality Threshold",
             min_value=1,
             max_value=5,
-            value=4,
+            value=generation_config.get("default_rejection_threshold", 4),
             help="Minimum logic score to accept (1-5)"
         )
 
         batch_size = st.number_input(
             "Batch Size",
             min_value=1,
-            max_value=100,
-            value=5,
+            max_value=generation_config.get("max_batch_size", 100),
+            value=min(5, generation_config.get("max_batch_size", 100)),
             help="Number of samples to generate"
         )
 
         # Export settings
-        st.subheader("📤 Export Settings")
+        st.subheader("Export Settings")
 
         export_formats = st.multiselect(
             "Export Formats",
             ["JSONL", "Parquet", "SFT", "DPO"],
-            default=["JSONL"],
+            default=export_config.get("default_formats", ["JSONL"]),
             help="Formats to export generated data"
         )
 
         include_reasoning = st.checkbox(
             "Include Reasoning Traces",
-            value=True,
+            value=export_config.get("include_reasoning", True),
             help="Include Chain-of-Thought reasoning in exports"
         )
 
         output_dir = st.text_input(
             "Output Directory",
-            value="output",
+            value=export_config.get("default_output_dir", "output"),
             help="Directory to save exported files"
         )
 
         # Generate button
         generate_button = st.button(
-            "🚀 Generate Samples",
+            "Generate Samples",
             type="primary",
             use_container_width=True
         )
@@ -167,7 +195,7 @@ def main():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.header("📝 Generation Results")
+        st.header("Generation Results")
 
         if generate_button:
             with st.spinner("Generating samples..."):
@@ -210,7 +238,7 @@ def main():
                     st.session_state.samples = valid_samples
 
                     # Show results
-                    st.success(f"✅ Generated {len(samples)} samples, {len(valid_samples)} valid")
+                    st.success(f"[OK] Generated {len(samples)} samples, {len(valid_samples)} valid")
 
                     # Display samples
                     for i, sample in enumerate(valid_samples[:5]):  # Show first 5
@@ -219,12 +247,12 @@ def main():
                             # Quality indicators
                             col_a, col_b, col_c = st.columns(3)
                             with col_a:
-                                score_color = "🟢" if sample.reasoning_trace.logic_score >= 4 else "🟡" if sample.reasoning_trace.logic_score >= 3 else "🔴"
-                                st.metric("Logic Score", f"{score_color} {sample.reasoning_trace.logic_score}/5")
+                                score_label = "High" if sample.reasoning_trace.logic_score >= 4 else "Medium" if sample.reasoning_trace.logic_score >= 3 else "Low"
+                                st.metric("Logic Score", f"{score_label} {sample.reasoning_trace.logic_score}/5")
                             with col_b:
                                 st.metric("Confidence", f"{sample.reasoning_trace.confidence_score:.2f}")
                             with col_c:
-                                st.metric("Valid", "✅ Yes" if sample.is_valid else "❌ No")
+                                st.metric("Valid", "Yes" if sample.is_valid else "No")
 
                             # Scenario
                             st.markdown(f"**Scenario:** {sample.scenario}")
@@ -240,13 +268,22 @@ def main():
                             st.code(sample.final_output, language="text")
 
                 except Exception as e:
-                    st.error(f"❌ Generation failed: {str(e)}")
-                    st.exception(e)
+                    error_msg = str(e)
+                    if "model" in error_msg.lower() and "not found" in error_msg.lower():
+                        st.error("[ERROR] Model not found. Please select an available model or ensure Ollama is running with the correct model.")
+                        st.info("[TIP] Try running: `ollama pull deepseek-r1:1.5b` in your terminal")
+                    elif "connection" in error_msg.lower():
+                        st.error("[ERROR] Connection failed. Please check if Ollama is running.")
+                        st.info("[TIP] Try clicking 'Try to Start Ollama' or run: `ollama serve` in another terminal")
+                    else:
+                        st.error(f"[ERROR] Generation failed: {error_msg}")
+                        with st.expander("Show full error details"):
+                            st.exception(e)
 
         # Display existing samples if available
         elif st.session_state.samples:
             valid_samples = st.session_state.samples
-            st.info(f"📊 Showing {len(valid_samples)} previously generated samples")
+            st.info(f"Showing {len(valid_samples)} previously generated samples")
 
             for i, sample in enumerate(valid_samples[:5]):
                 with st.expander(f"Sample {i+1}: {sample.id[:8]}...", expanded=(i==0)):
@@ -255,7 +292,7 @@ def main():
                     st.code(sample.final_output, language="text")
 
     with col2:
-        st.header("📊 Statistics")
+        st.header("Statistics")
 
         if st.session_state.pipeline:
             try:
@@ -272,7 +309,7 @@ def main():
 
                 # Performance chart placeholder
                 if stats.get('total_generated', 0) > 0:
-                    st.subheader("📈 Performance")
+                    st.subheader("Performance")
                     perf_data = {
                         'Metric': ['Generation Time', 'Evaluation Time'],
                         'Average (seconds)': [
@@ -286,10 +323,10 @@ def main():
                 st.warning("Statistics not available")
 
         # Export section
-        st.header("💾 Export Data")
+        st.header("Export Data")
 
         if st.session_state.samples and export_formats:
-            if st.button("📤 Export Selected Formats", use_container_width=True):
+            if st.button("Export Selected Formats", use_container_width=True):
                 with st.spinner("Exporting data..."):
                     try:
                         export_config = ExportConfig(
@@ -318,16 +355,16 @@ def main():
                                 filename = exporter.export_dpo_format(st.session_state.samples)
                                 exported_files.append(("DPO", filename))
 
-                        st.success("✅ Export completed!")
+                        st.success("[OK] Export completed!")
                         st.markdown("**Exported files:**")
                         for fmt, filename in exported_files:
                             st.code(f"{fmt}: {filename}", language="text")
 
                     except Exception as e:
-                        st.error(f"❌ Export failed: {str(e)}")
+                        st.error(f"[ERROR] Export failed: {str(e)}")
 
         # Help section
-        st.header("❓ Help")
+        st.header("Help")
 
         with st.expander("How to use"):
             st.markdown("""
