@@ -7,7 +7,11 @@ Helper functions and utilities for the Syndgen pipeline.
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
-import ollama
+import yaml
+try:
+    import ollama as _ollama
+except ImportError:
+    _ollama = None
 import os
 
 def setup_logging(level: int = logging.INFO):
@@ -19,6 +23,20 @@ def setup_logging(level: int = logging.INFO):
             logging.StreamHandler()
         ]
     )
+
+def load_config(path: str = "config.yaml") -> Dict[str, Any]:
+    """Load YAML configuration with safe defaults."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+            if not isinstance(data, dict):
+                return {}
+            return data
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        logging.warning(f"Failed to load config from {path}: {e}")
+        return {}
 
 def print_stats(stats: Dict[str, Any]):
     """Print pipeline statistics in a readable format"""
@@ -105,6 +123,30 @@ def get_sample_summary(sample: Dict[str, Any]) -> str:
     ]
     return "\n".join(summary)
 
+def get_ollama_client() -> Optional[Any]:
+    """Return the Ollama client module if available."""
+    return _ollama
+
+def is_ollama_running(client: Optional[Any]) -> bool:
+    """Check if Ollama server is reachable."""
+    if client is None:
+        return False
+    try:
+        client.list()
+        return True
+    except Exception:
+        return False
+
+def list_ollama_models(client: Optional[Any]) -> list:
+    """Return available Ollama model names or empty list."""
+    if client is None:
+        return []
+    try:
+        models = client.list().get('models', [])
+        return [model.get('name') for model in models if model.get('name')]
+    except Exception:
+        return []
+
 def setup_ollama_client() -> Optional[Any]:
     """
     Set up and configure the Ollama client for LLM integration
@@ -114,7 +156,10 @@ def setup_ollama_client() -> Optional[Any]:
     """
     try:
         # Check if Ollama is available
-        ollama_client = ollama
+        ollama_client = get_ollama_client()
+        if ollama_client is None:
+            logging.warning("Ollama package not available. Falling back to simulation mode.")
+            return None
 
         # Configure default settings
         ollama_host = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
@@ -122,13 +167,13 @@ def setup_ollama_client() -> Optional[Any]:
         # Test connection
         try:
             # Simple test to check if Ollama server is running
-            models = ollama.list()
+            models = ollama_client.list()
             logging.info(f"Ollama client initialized. Available models: {[m['name'] for m in models['models']]}")
             return ollama_client
         except Exception as e:
             logging.warning(f"Ollama server not available: {e}")
             return None
 
-    except ImportError:
-        logging.warning("Ollama package not available. Falling back to simulation mode.")
+    except Exception as e:
+        logging.warning(f"Ollama client setup failed: {e}")
         return None
