@@ -58,6 +58,17 @@ def start_ollama():
     except Exception:
         return False
 
+def pull_model(model_name: str) -> bool:
+    """Attempt to pull a model via Ollama."""
+    client = get_ollama_client()
+    if not client:
+        return False
+    try:
+        client.pull(model_name)
+        return True
+    except Exception:
+        return False
+
 
 # Initialize session state
 if 'pipeline' not in st.session_state:
@@ -85,6 +96,8 @@ def main():
     # Sidebar configuration
     with st.sidebar:
         st.header("Configuration")
+        default_model = ollama_config.get("default_model", "deepseek-r1:1.5b")
+
         # Ollama status and model detection
         ollama_status = check_ollama_status()
         available_models = []
@@ -93,6 +106,16 @@ def main():
                 available_models = list_ollama_models(get_ollama_client())
                 st.success(f"[OK] Ollama Connected ({len(available_models)} models available)")
                 operational_mode = "LLM Mode"
+
+                if default_model not in available_models:
+                    st.warning(f"[WARN] Default model '{default_model}' not found")
+                    if st.button("Pull Default Model"):
+                        with st.spinner(f"Pulling {default_model}..."):
+                            if pull_model(default_model):
+                                st.success("Model pulled successfully!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to pull model. Please pull it manually.")
             except Exception:
                 st.warning("[WARN] Ollama running but unable to list models")
                 operational_mode = "Enhanced Simulation Mode"
@@ -102,6 +125,10 @@ def main():
                 with st.spinner("Starting Ollama..."):
                     if start_ollama():
                         st.success("Ollama started successfully!")
+                        if pull_model(default_model):
+                            st.success("Model pulled successfully!")
+                        else:
+                            st.warning("Model pull failed. You can try again or pull manually.")
                         st.rerun()
                     else:
                         st.error("Failed to start Ollama. Please start it manually.")
@@ -209,7 +236,7 @@ def main():
                         max_retries=1
                     )
 
-                    export_config = ExportConfig(
+                    export_settings = ExportConfig(
                         format="jsonl",  # Default, will be overridden
                         output_dir=output_dir,
                         include_reasoning=include_reasoning
@@ -329,13 +356,13 @@ def main():
             if st.button("Export Selected Formats", use_container_width=True):
                 with st.spinner("Exporting data..."):
                     try:
-                        export_config = ExportConfig(
+                        export_settings = ExportConfig(
                             format="jsonl",
                             output_dir=output_dir,
                             include_reasoning=include_reasoning
                         )
 
-                        exporter = DataExporter(export_config)
+                        exporter = DataExporter(export_settings)
 
                         exported_files = []
 
