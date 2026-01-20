@@ -168,7 +168,8 @@ def setup_ollama_client() -> Optional[Any]:
         try:
             # Simple test to check if Ollama server is running
             models = ollama_client.list()
-            logging.info(f"Ollama client initialized. Available models: {[m['name'] for m in models['models']]}")
+            model_names = [m.get('name') for m in models.get('models', []) if m.get('name')]
+            logging.info(f"Ollama client initialized. Available models: {model_names}")
             return ollama_client
         except Exception as e:
             logging.warning(f"Ollama server not available: {e}")
