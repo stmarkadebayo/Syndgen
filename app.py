@@ -17,6 +17,7 @@ from export.formats import DataExporter
 from utils.helpers import (
     setup_logging,
     load_config,
+    configure_ollama_env,
     get_ollama_client,
     is_ollama_running,
     list_ollama_models
@@ -32,6 +33,7 @@ ollama_config = config.get('ollama', {})
 generation_config = config.get('generation', {})
 export_config = config.get('export', {})
 ui_config = config.get('ui', {})
+configure_ollama_env(ollama_config)
 
 # Configure page
 st.set_page_config(
