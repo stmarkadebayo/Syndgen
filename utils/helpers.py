@@ -21,7 +21,8 @@ def setup_logging(level: int = logging.INFO):
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler()
-        ]
+        ],
+        force=True
     )
 
 def load_config(path: str = "config.yaml") -> Dict[str, Any]:
@@ -37,6 +38,14 @@ def load_config(path: str = "config.yaml") -> Dict[str, Any]:
     except Exception as e:
         logging.warning(f"Failed to load config from {path}: {e}")
         return {}
+
+def configure_ollama_env(ollama_config: Dict[str, Any]) -> None:
+    """Apply Ollama host config to environment if not already set."""
+    if not isinstance(ollama_config, dict):
+        return
+    host = ollama_config.get("host")
+    if host and not os.environ.get("OLLAMA_HOST"):
+        os.environ["OLLAMA_HOST"] = str(host)
 
 def print_stats(stats: Dict[str, Any]):
     """Print pipeline statistics in a readable format"""
@@ -142,8 +151,20 @@ def list_ollama_models(client: Optional[Any]) -> list:
     if client is None:
         return []
     try:
-        models = client.list().get('models', [])
-        return [model.get('name') for model in models if model.get('name')]
+        result = client.list()
+        if isinstance(result, dict):
+            models = result.get('models', [])
+        else:
+            models = getattr(result, 'models', [])
+        names = []
+        for model in models:
+            if isinstance(model, dict):
+                name = model.get('name') or model.get('model')
+            else:
+                name = getattr(model, 'name', None) or getattr(model, 'model', None)
+            if name:
+                names.append(name)
+        return names
     except Exception:
         return []
 
@@ -167,8 +188,7 @@ def setup_ollama_client() -> Optional[Any]:
         # Test connection
         try:
             # Simple test to check if Ollama server is running
-            models = ollama_client.list()
-            model_names = [m.get('name') for m in models.get('models', []) if m.get('name')]
+            model_names = list_ollama_models(ollama_client)
             logging.info(f"Ollama client initialized. Available models: {model_names}")
             return ollama_client
         except Exception as e:
