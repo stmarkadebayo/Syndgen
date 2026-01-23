@@ -14,6 +14,7 @@ from utils.helpers import (
     setup_logging,
     print_stats,
     load_config,
+    configure_ollama_env,
     get_ollama_client,
     list_ollama_models
 )
@@ -28,6 +29,7 @@ def main():
     ollama_config = config.get("ollama", {})
     generation_config = config.get("generation", {})
     export_config = config.get("export", {})
+    configure_ollama_env(ollama_config)
 
     parser = argparse.ArgumentParser(
         description="Syndgen - Localized Synthetic Data Generation & Distillation Engine",
